@@ -1,5 +1,6 @@
 import sys
 import os
+import subprocess
 from pathlib import Path
 
 try:
@@ -9,7 +10,7 @@ except ImportError:
     sys.exit(1)
 
 def get_download_folder():
-    """Crea y retorna la ruta de la carpeta 'Videos_Descargados' en el usuario actual."""
+    """Crea y retorna la ruta de la carpeta 'Videos_Descargados'."""
     folder = Path.home() / "Videos" / "Videos_Descargados"
     folder.mkdir(parents=True, exist_ok=True)
     return str(folder)
@@ -17,65 +18,56 @@ def get_download_folder():
 def download_media(url):
     output_dir = get_download_folder()
     
-    print("\n=== DESCARGADOR UNIVERSAL DE VIDEO (MÁXIMA CALIDAD) ===")
-    print(f"[+] Carpeta de destino: {output_dir}")
-    print(f"[+] Procesando enlace: {url}\n")
+    print("\n=== DESCARGADOR DE VIDEO UNIVERSAL ===")
+    print(f"[+] Analizando URL: {url}")
     
-    # Configuración de alta fidelidad y máxima compatibilidad multiplataforma
+    # Configuración limpia sin registros de depuración
     ydl_opts = {
-        # Seleccionar la máxima resolución de video y mejor pista de audio disponibles
         'format': 'bestvideo+bestaudio/best',
-        
-        # Unificar automáticamente el stream de video y audio en un archivo MP4 con FFmpeg
         'merge_output_format': 'mp4',
-        
-        # Estructura del nombre de archivo: Título [ID_Plataforma].ext
         'outtmpl': os.path.join(output_dir, '%(title)s [%(id)s].%(ext)s'),
-        
-        # Evitar descargar listas completas si el enlace pertenece a una playlist
         'noplaylist': True,
-        
-        # Reintentos y tolerancia a fallos de red en plataformas con protección anti-bot
+        'quiet': True,               # Suprime los textos de depuración de yt-dlp
+        'no_warnings': True,         # Desactiva advertencias secundarias
+        'nocheckcertificate': True,
         'retries': 10,
         'fragment_retries': 10,
-        'nocheckcertificate': True,
-        'no_warnings': True,
-        
-        # User-Agent actualizado para evitar bloqueos en Instagram, TikTok y Twitter/X
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extraer información sin descargar primero para mostrar datos
+            # Extraer información del video
             info = ydl.extract_info(url, download=False)
             title = info.get('title', 'Video sin título')
-            extractor = info.get('extractor_key', 'Plataforma desconocida')
-            width = info.get('width', 'N/A')
-            height = info.get('height', 'N/A')
+            width = info.get('width')
+            height = info.get('height')
             
             res_str = f"{width}x{height}" if width and height else "Máxima detectada"
             
-            print(f"[+] Plataforma: {extractor}")
             print(f"[+] Título: {title}")
-            print(f"[+] Resolución objetivo: {res_str}")
-            print("[+] Iniciando descarga...")
+            print(f"[+] Máxima resolución: {res_str}")
+            print(f"[+] Carpeta de destino: {output_dir}")
+            print("[+] Descargando...\n")
             
-            # Realizar la descarga y fusión
+            # Ejecutar la descarga
             ydl.download([url])
             
-            print(f"\n[✔] ¡Descarga completada con éxito!")
-            print(f"[✔] Archivo guardado en: {output_dir}\n")
+            print("[✔] ¡Video descargado con éxito!")
+            print("[+] Abriendo la carpeta de descargas...")
             
-    except yt_dlp.utils.DownloadError as e:
-        print(f"\n[X] Error de descarga: El enlace es privado, requiere inicio de sesión o no contiene video soportado.")
+            # Abrir automáticamente la ubicación en el Explorador de archivos de Windows
+            os.startfile(output_dir)
+            
+    except yt_dlp.utils.DownloadError:
+        print("\n[X] Error al descargar el video: La URL no es compatible o el reproductor incrustado está protegido.")
+        print("[i] En sitios de anime/películas, copia el enlace directo del reproductor interno o el flujo .m3u8 (F12).\n")
     except Exception as e:
         print(f"\n[X] Error inesperado: {e}\n")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("\nUso correcto: videodl \"<URL_DEL_VIDEO>\"")
-        print("Ejemplo: videodl \"https://www.tiktok.com/@usuario/video/123456789\"\n")
+        print("\nUso correcto: videodl \"<URL_DEL_VIDEO>\"\n")
         sys.exit(1)
         
     target_url = sys.argv[1].strip()
