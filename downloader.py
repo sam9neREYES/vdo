@@ -1,155 +1,82 @@
-import argparse
-import os
-import platform
-import subprocess
 import sys
-import yt_dlp
+import os
+from pathlib import Path
 
-# Habilitar soporte de colores ANSI en CMD / PowerShell de Windows
-if platform.system() == "Windows":
-    os.system('')
+try:
+    import yt_dlp
+except ImportError:
+    print("[X] Error: 'yt-dlp' no está instalado. Ejecuta: pip install yt-dlp")
+    sys.exit(1)
 
-CYAN = "\033[96m"
-GREEN = "\033[92m"
-YELLOW = "\033[93m"
-RED = "\033[91m"
-RESET = "\033[0m"
-BOLD = "\033[1m"
+def get_download_folder():
+    """Crea y retorna la ruta de la carpeta 'Videos_Descargados' en el usuario actual."""
+    folder = Path.home() / "Videos" / "Videos_Descargados"
+    folder.mkdir(parents=True, exist_ok=True)
+    return str(folder)
 
-def get_default_download_dir():
-    """Obtiene la ruta estándar 'Videos/Videos_Descargados' del usuario actual."""
-    user_videos = os.path.join(os.path.expanduser("~"), "Videos")
-    target_dir = os.path.join(user_videos, "Videos_Descargados")
-    return target_dir
-
-def open_folder(path):
-    """Abre la carpeta de destino en el Explorador de archivos nativo del sistema."""
-    try:
-        if platform.system() == "Windows":
-            os.startfile(path)
-        elif platform.system() == "Darwin":  # macOS
-            subprocess.run(["open", path])
-        else:  # Linux
-            subprocess.run(["xdg-open", path])
-    except Exception as e:
-        print(f"{YELLOW}[!] No se pudo abrir la carpeta automáticamente: {e}{RESET}")
-
-def format_bytes(b):
-    if not b:
-        return "N/A"
-    if b >= 1024**3:
-        return f"{b / (1024**3):.2f} GB"
-    elif b >= 1024**2:
-        return f"{b / (1024**2):.2f} MB"
-    elif b >= 1024:
-        return f"{b / 1024:.2f} KB"
-    return f"{b} B"
-
-def format_seconds(s):
-    if not s or s < 0:
-        return "--:--"
-    m, sec = divmod(int(s), 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{h:02d}:{m:02d}:{sec:02d}"
-    return f"{m:02d}:{sec:02d}"
-
-def progress_hook(d):
-    if d['status'] == 'downloading':
-        downloaded = d.get('downloaded_bytes', 0)
-        total = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-        speed = d.get('speed', 0) or 0
-        eta = d.get('eta', 0) or 0
-
-        percent = (downloaded / total * 100) if total > 0 else 0
-        bar_length = 30
-        filled_length = int(bar_length * percent // 100)
-        bar = '█' * filled_length + '░' * (bar_length - filled_length)
-
-        speed_str = f"{format_bytes(speed)}/s"
-        eta_str = format_seconds(eta)
-        downloaded_str = format_bytes(downloaded)
-        total_str = format_bytes(total)
-
-        msg = (
-            f"\r{CYAN}[Progreso]{RESET} [{CYAN}{bar}{RESET}] "
-            f"{BOLD}{percent:5.1f}%{RESET} | "
-            f"{downloaded_str} / {total_str} | "
-            f"{YELLOW}{speed_str}{RESET} | "
-            f"ETA: {YELLOW}{eta_str}{RESET} "
-        )
-        sys.stdout.write(msg)
-        sys.stdout.flush()
-
-    elif d['status'] == 'finished':
-        sys.stdout.write(f"\n{GREEN}[✔] Descarga finalizada. Procesando y unificando video/audio...{RESET}\n")
-        sys.stdout.flush()
-
-def download_video(url: str, output_dir: str = None):
-    # Si no se especifica ruta personalizada, usará ~/Videos/Videos_Descargados
-    if not output_dir:
-        output_dir = get_default_download_dir()
-
-    # Creación automática de la carpeta contenedora en la primera ejecución
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-        print(f"{GREEN}[+] Se ha creado la carpeta contenedora por primera vez:{RESET} {output_dir}")
-
+def download_media(url):
+    output_dir = get_download_folder()
+    
+    print("\n=== DESCARGADOR UNIVERSAL DE VIDEO (MÁXIMA CALIDAD) ===")
+    print(f"[+] Carpeta de destino: {output_dir}")
+    print(f"[+] Procesando enlace: {url}\n")
+    
+    # Configuración de alta fidelidad y máxima compatibilidad multiplataforma
     ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
+        # Seleccionar la máxima resolución de video y mejor pista de audio disponibles
+        'format': 'bestvideo+bestaudio/best',
+        
+        # Unificar automáticamente el stream de video y audio en un archivo MP4 con FFmpeg
         'merge_output_format': 'mp4',
-        'outtmpl': os.path.join(output_dir, '%(title)s.%(ext)s'),
-        'progress_hooks': [progress_hook],
-        'quiet': True,
+        
+        # Estructura del nombre de archivo: Título [ID_Plataforma].ext
+        'outtmpl': os.path.join(output_dir, '%(title)s [%(id)s].%(ext)s'),
+        
+        # Evitar descargar listas completas si el enlace pertenece a una playlist
+        'noplaylist': True,
+        
+        # Reintentos y tolerancia a fallos de red en plataformas con protección anti-bot
+        'retries': 10,
+        'fragment_retries': 10,
+        'nocheckcertificate': True,
         'no_warnings': True,
+        
+        # User-Agent actualizado para evitar bloqueos en Instagram, TikTok y Twitter/X
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     }
 
-    print(f"\n{BOLD}{CYAN}=== DESCARGADOR DE VIDEO UNIVERSAL ==={RESET}")
-    print(f"{YELLOW}[+] Analizando URL:{RESET} {url}")
-    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Extraer información sin descargar primero para mostrar datos
             info = ydl.extract_info(url, download=False)
             title = info.get('title', 'Video sin título')
-            resolution = info.get('resolution') or f"{info.get('width')}x{info.get('height')}"
+            extractor = info.get('extractor_key', 'Plataforma desconocida')
+            width = info.get('width', 'N/A')
+            height = info.get('height', 'N/A')
             
-            print(f"{GREEN}[+] Título:{RESET} {title}")
-            print(f"{GREEN}[+] Máxima resolución:{RESET} {resolution}")
-            print(f"{GREEN}[+] Carpeta de destino:{RESET} {output_dir}")
-            print(f"{YELLOW}[+] Descargando...{RESET}\n")
+            res_str = f"{width}x{height}" if width and height else "Máxima detectada"
             
+            print(f"[+] Plataforma: {extractor}")
+            print(f"[+] Título: {title}")
+            print(f"[+] Resolución objetivo: {res_str}")
+            print("[+] Iniciando descarga...")
+            
+            # Realizar la descarga y fusión
             ydl.download([url])
-            print(f"\n{BOLD}{GREEN}[✔] ¡Video descargado con éxito!{RESET}")
             
-            # Apertura automática de la carpeta
-            print(f"{CYAN}[+] Abriendo la carpeta de descargas...{RESET}")
-            open_folder(output_dir)
-
+            print(f"\n[✔] ¡Descarga completada con éxito!")
+            print(f"[✔] Archivo guardado en: {output_dir}\n")
+            
     except yt_dlp.utils.DownloadError as e:
-        print(f"\n{RED}[✖] Error al descargar el video: {e}{RESET}", file=sys.stderr)
-    except KeyboardInterrupt:
-        print(f"\n\n{RED}[!] Descarga cancelada por el usuario.{RESET}")
+        print(f"\n[X] Error de descarga: El enlace es privado, requiere inicio de sesión o no contiene video soportado.")
     except Exception as e:
-        print(f"\n{RED}[✖] Error inesperado: {e}{RESET}", file=sys.stderr)
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="CLI Universal para descargar videos en máxima resolución desde CMD, PowerShell o Terminal."
-    )
-    parser.add_argument("url", nargs="?", help="URL del video a descargar")
-    parser.add_argument("-o", "--output", default=None, help="Ruta de destino personalizada (Opcional)")
-
-    args = parser.parse_args()
-
-    url = args.url
-    if not url:
-        url = input("Ingresa la URL del video: ").strip()
-
-    if not url:
-        print(f"{RED}[✖] Debes ingresar una URL válida.{RESET}")
-        sys.exit(1)
-
-    download_video(url, args.output)
+        print(f"\n[X] Error inesperado: {e}\n")
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 2:
+        print("\nUso correcto: videodl \"<URL_DEL_VIDEO>\"")
+        print("Ejemplo: videodl \"https://www.tiktok.com/@usuario/video/123456789\"\n")
+        sys.exit(1)
+        
+    target_url = sys.argv[1].strip()
+    download_media(target_url)
