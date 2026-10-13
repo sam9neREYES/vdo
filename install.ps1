@@ -6,5 +6,5 @@ $profileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
 if ($profileContent -notlike "*function videodl*") {
     Add-Content -Path $PROFILE -Value "`nfunction videodl { python `"$env:USERPROFILE\downloader.py`" `$args }"
 }
-. $PROFILE
+function global:videodl { python "$env:USERPROFILE\downloader.py" $args }
 Write-Host "`n[✔] Instalacion completada con exito. Ya puedes usar 'videodl' en tu terminal." -ForegroundColor Green
