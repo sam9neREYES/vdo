@@ -5,22 +5,25 @@ try {
     $pythonCheck = python --version 2>&1
     if ($pythonCheck -notlike "*Python 3*") { throw }
 } catch {
-    Write-Host "[!] Python no detectado. Instalando Python automaticamente..." -ForegroundColor Yellow
+    Write-Host "[!] Instalando Python..." -ForegroundColor Yellow
     winget install Python.Python.3.11 --silent --accept-package-agreements --accept-source-agreements
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# 2. Verificar e instalar FFmpeg si falta
-try {
-    $ffmpegCheck = ffmpeg -version 2>&1
-    if ($ffmpegCheck -notlike "*ffmpeg version*") { throw }
-} catch {
-    Write-Host "[!] FFmpeg no detectado. Instalando FFmpeg para unificacion de audio/video..." -ForegroundColor Yellow
-    winget install Gyan.FFmpeg --silent --accept-package-agreements --accept-source-agreements
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+# 2. Verificar e instalar FFmpeg directamente si falta
+if (!(Test-Path "$env:USERPROFILE\ffmpeg.exe") -and !(Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+    Write-Host "[!] Descargando e instalando FFmpeg..." -ForegroundColor Yellow
+    Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "$env:TEMP\ffmpeg.zip"
+    Expand-Archive -Path "$env:TEMP\ffmpeg.zip" -DestinationPath "$env:TEMP\ffmpeg" -Force
+    $exe = Get-ChildItem -Path "$env:TEMP\ffmpeg" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+    Copy-Item -Path $exe.FullName -Destination "$env:USERPROFILE\ffmpeg.exe" -Force
+    Remove-Item "$env:TEMP\ffmpeg.zip" -Force
+    Remove-Item "$env:TEMP\ffmpeg" -Recurse -Force
+    [Environment]::SetEnvironmentVariable("Path", [System.Environment]::GetEnvironmentVariable("Path","User") + ";$env:USERPROFILE", "User")
+    $env:Path += ";$env:USERPROFILE"
 }
 
-# 3. Instalar/Actualizar librerias
+# 3. Instalar/Actualizar librerias requeridas
 python -m pip install yt-dlp --quiet --upgrade
 
 # 4. Descargar script principal
